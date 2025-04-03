@@ -56,6 +56,7 @@ class ProxyLeakTask implements Runnable
 
    ProxyLeakTask(final PoolEntry poolEntry)
    {
+      // 如果连接泄露就抛这个异常
       this.exception = new Exception("Apparent connection leak detected");
       this.threadName = Thread.currentThread().getName();
       this.connectionName = poolEntry.connection.toString();
@@ -80,6 +81,7 @@ class ProxyLeakTask implements Runnable
       final var trace = new StackTraceElement[stackTrace.length - 5];
       System.arraycopy(stackTrace, 5, trace, 0, trace.length);
 
+      // 打印 1 次连接泄露的 WARN 日志
       exception.setStackTrace(trace);
       LOGGER.warn("Connection leak detection triggered for {} on thread {}, stack trace follows", connectionName, threadName, exception);
    }

@@ -124,6 +124,8 @@ public final class UtilityElf
 
       var queue = new LinkedBlockingQueue<Runnable>(queueSize);
       var executor = new ThreadPoolExecutor(1 /*core*/, 1 /*max*/, 5 /*keepalive*/, SECONDS, queue, threadFactory, policy);
+      
+      // 允许核心线程被回收
       executor.allowCoreThreadTimeOut(true);
       return executor;
    }

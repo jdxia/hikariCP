@@ -2,7 +2,9 @@
 <configuration status="OFF">
   <appenders>
     <Console name="Console" target="SYSTEM_ERR">
-      <PatternLayout pattern="%d{ABSOLUTE_MICROS} [seq%5sn] [%-40.40t] %-5level %-20c{1} - %msg%n" />
+<!--       <PatternLayout pattern="%d{ABSOLUTE_MICROS} [seq%5sn] [%-40.40t] %-5level %-20c{1} [%logger] [%file:%line] [%X] - %msg%n" />-->
+
+       <PatternLayout pattern="%style{[%d{ABSOLUTE_MICROS}]}{blue} %style{[%thread]}{blue} %style{[%-40.40logger{39}:%line]}{cyan} %highlight{[%-5level]} - %msg%n" />
     </Console>
   </appenders>
   <Loggers>

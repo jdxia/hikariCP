@@ -89,6 +89,7 @@ abstract class PoolBase
 
    PoolBase(final HikariConfig config)
    {
+      // 基本是从config入参拷贝过来
       this.config = config;
 
       this.networkTimeout = UNINITIALIZED;
@@ -101,6 +102,8 @@ abstract class PoolBase
 
       this.isQueryTimeoutSupported = UNINITIALIZED;
       this.isNetworkTimeoutSupported = UNINITIALIZED;
+
+      // 如果connectionTestQuery为空，使用ping检测与数据库连通性
       this.isUseJdbc4Validation = config.getConnectionTestQuery() == null;
       this.isIsolateInternalQueries = config.isIsolateInternalQueries();
 
@@ -109,6 +112,7 @@ abstract class PoolBase
       this.validationTimeout = config.getValidationTimeout();
       this.lastConnectionFailure = new AtomicReference<>();
 
+      // 创建DriverDataSource
       initializeDataSource();
    }
 
@@ -144,18 +148,27 @@ abstract class PoolBase
       }
    }
 
+   // 如果超过500ms需要进行链接存活检查，反过来说，假如连接频繁获取和归还，不用进行存活检查
    boolean isConnectionDead(final Connection connection)
    {
       try {
          try {
+            // 设置网络超时时间为 默认 5000ms
             setNetworkTimeout(connection, validationTimeout);
 
+            // validationTimeout 默认 5 秒，最低 1 秒
             final var validationSeconds = (int) Math.max(1000L, validationTimeout) / 1000;
 
+            /**
+             * 测试链接是否有效
+             * 如果connectionTestQuery配置为空，使用Connection自带的isValid方法检测
+             * 对于com.mysql.cj.jdbc.ConnectionImpl#isValid就是通过ping的方式
+             */
             if (isUseJdbc4Validation) {
                return !connection.isValid(validationSeconds);
             }
 
+            // 如果connectionTestQuery配置不为空，执行配置的sql
             try (var statement = connection.createStatement()) {
                if (isNetworkTimeoutSupported != TRUE) {
                   setQueryTimeout(statement, validationSeconds);
@@ -165,6 +178,7 @@ abstract class PoolBase
             }
          }
          finally {
+            // 恢复网络超时时间networkTimeout默认等于validationTimeout
             setNetworkTimeout(connection, networkTimeout);
 
             if (isIsolateInternalQueries && !isAutoCommit) {
@@ -176,6 +190,8 @@ abstract class PoolBase
       }
       catch (Exception e) {
          lastConnectionFailure.set(e);
+
+         // 此处打印 WARN 日志，可以通过 console.log 查看是否存在 获取到已被关闭连接 的情况
          logger.warn("{} - Failed to validate connection {} ({}). Possibly consider using a shorter maxLifetime value.",
                      poolName, connection, e.getMessage());
          return true;
@@ -198,6 +214,7 @@ abstract class PoolBase
 
    PoolEntry newPoolEntry() throws Exception
    {
+      // newConnection 获取真正的Connection
       return new PoolEntry(newConnection(), this, isReadOnly, isAutoCommit);
    }
 
@@ -323,6 +340,7 @@ abstract class PoolBase
          PropertyElf.setTargetFromProperties(ds, dataSourceProperties);
       }
       else if (jdbcUrl != null && ds == null) {
+         // 最终是创建了DriverDataSource负责实际获取连接
          ds = new DriverDataSource(jdbcUrl, driverClassName, dataSourceProperties, username, password);
       }
       else if (dataSourceJNDI != null && ds == null) {
@@ -351,6 +369,7 @@ abstract class PoolBase
    {
       final var start = currentTime();
 
+      // DriverDataSource获取Connection
       Connection connection = null;
       try {
          var username = config.getUsername();
@@ -361,6 +380,7 @@ abstract class PoolBase
             throw new SQLTransientConnectionException("DataSource returned null unexpectedly");
          }
 
+         // 初始化连接的一些参数，比如readOnly，autoCommit
          setupConnection(connection);
          lastConnectionFailure.set(null);
          return connection;
@@ -595,6 +615,7 @@ abstract class PoolBase
       if ((dsClassName != null && dsClassName.contains("Mysql")) ||
           (jdbcUrl != null && jdbcUrl.contains("mysql")) ||
           (dataSource != null && dataSource.getClass().getName().contains("Mysql"))) {
+         // 由于超时设置被放入执行器中异步执行，如果用户立即调用close()，可能会在实际设置超时之前关闭连接，导致空指针异常
          netTimeoutExecutor = new SynchronousExecutor();
       }
       else {

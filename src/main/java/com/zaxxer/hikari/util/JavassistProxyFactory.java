@@ -47,10 +47,12 @@ public final class JavassistProxyFactory
       classPool.appendClassPath(new LoaderClassPath(JavassistProxyFactory.class.getClassLoader()));
 
       if (args.length > 0) {
+         // 生成class文件存放位置，默认./target/classes
          genDirectory = args[0];
       }
 
       // Cast is not needed for these
+       // 生成Connection、Statement、ResultSet、DatabaseMetaData代理类
       String methodBody = "{ try { return delegate.method($$); } catch (SQLException e) { throw checkException(e); } }";
       generateProxyClass(Connection.class, ProxyConnection.class.getName(), methodBody);
       generateProxyClass(Statement.class, ProxyStatement.class.getName(), methodBody);
@@ -58,10 +60,12 @@ public final class JavassistProxyFactory
       generateProxyClass(DatabaseMetaData.class, ProxyDatabaseMetaData.class.getName(), methodBody);
 
       // For these we have to cast the delegate
+      // 生成PreparedStatement、CallableStatement代理类
       methodBody = "{ try { return ((cast) delegate).method($$); } catch (SQLException e) { throw checkException(e); } }";
       generateProxyClass(PreparedStatement.class, ProxyPreparedStatement.class.getName(), methodBody);
       generateProxyClass(CallableStatement.class, ProxyCallableStatement.class.getName(), methodBody);
 
+      // 修改ProxyFactory的实现
       modifyProxyFactory();
    }
 
@@ -73,12 +77,14 @@ public final class JavassistProxyFactory
       for (var method : proxyCt.getMethods()) {
          switch (method.getName()) {
             case "getProxyConnection":
+               // 调用 HikariProxyConnection 的构造方法
                method.setBody("{return new " + packageName + ".HikariProxyConnection($$);}");
                break;
             case "getProxyStatement":
                method.setBody("{return new " + packageName + ".HikariProxyStatement($$);}");
                break;
             case "getProxyPreparedStatement":
+               // 调用HikariProxyStatement的构造方法
                method.setBody("{return new " + packageName + ".HikariProxyPreparedStatement($$);}");
                break;
             case "getProxyCallableStatement":

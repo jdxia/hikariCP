@@ -26,9 +26,15 @@ import java.util.concurrent.Semaphore;
  * hopefully gets fully "optimized away" by the JIT.
  *
  * @author Brett Wooldridge
+ * 专门用于连接池挂起和恢复，利用的是JUC的Semaphore
+ * acquire：每次getConnection都会调用这个方法，如果当前连接池处于挂起状态，获取不到信号量将阻塞等待。
+ * release：释放信号量。
+ * suspend：阻塞等待获取所有信号量。
+ * resume：释放所有信号量
  */
 public class SuspendResumeLock
 {
+   // FAUX_LOCK是SuspendResumeLock的一个空实现，作者希望通过JIT optimized away 优化掉FAUX_LOCK相关的调用
    public static final SuspendResumeLock FAUX_LOCK = new SuspendResumeLock(false) {
       @Override
       public void acquire() {}
@@ -43,7 +49,10 @@ public class SuspendResumeLock
       public void resume() {}
    };
 
+   // 信号量最大许可
    private static final int MAX_PERMITS = 10000;
+
+   // 信号量
    private final Semaphore acquisitionSemaphore;
 
    /**
@@ -61,13 +70,17 @@ public class SuspendResumeLock
 
    public void acquire() throws SQLException
    {
+      // 先尝试获取信号量
       if (acquisitionSemaphore.tryAcquire()) {
          return;
       }
+
+      // 尝试获取信号量失败，com.zaxxer.hikari.throwIfSuspended如果为true，直接抛出异常
       else if (Boolean.getBoolean("com.zaxxer.hikari.throwIfSuspended")) {
          throw new SQLTransientException("The pool is currently suspended and configured to throw exceptions upon acquisition");
       }
 
+      // 尝试获取信号量失败，这里阻塞等待获取到新的许可
       acquisitionSemaphore.acquireUninterruptibly();
    }
 

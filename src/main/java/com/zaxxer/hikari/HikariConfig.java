@@ -61,20 +61,40 @@ public class HikariConfig implements HikariConfigMXBean
    // Properties changeable at runtime through the HikariConfigMXBean
    //
    private volatile String catalog;
+
+   // 运行时可修改 HikariConfigMXBean
+   // 从连接池获取连接的超时时间，默认30s
    private volatile long connectionTimeout;
+
+   // 校验连接是否有效的超时时间，默认5s
    private volatile long validationTimeout;
+
+   // 连接空闲时间，当最小连接数<最大连接数生效，默认10min
    private volatile long idleTimeout;
+
+   // 连接泄露检测时长，默认0不开启，不能超过maxLifetime
    private volatile long leakDetectionThreshold;
+
+   // 连接最大存活时间，默认30min，需要小于数据库wait_timeout，超过这个时间未使用的连接都会被关闭
    private volatile long maxLifetime;
+
+   // 最大连接数 默认10
    private volatile int maxPoolSize;
+
+   // 最小连接数 默认10
    private volatile int minIdle;
    private volatile String username;
    private volatile String password;
 
    // Properties NOT changeable at runtime
-   //
+   // 运行时不可修改
+   // 初始化检查与数据库连接是否ok的超时时间，默认1，为0代表不做初始化检查
    private long initializationFailTimeout;
+
+   // 创建连接后，在放入连接池前，执行的sql
    private String connectionInitSql;
+
+   // 校验连接是否可用的sql，如果为空使用ping，否则执行这个sql
    private String connectionTestQuery;
    private String dataSourceClassName;
    private String dataSourceJndiName;
@@ -84,10 +104,18 @@ public class HikariConfig implements HikariConfigMXBean
    private String poolName;
    private String schema;
    private String transactionIsolationName;
+
+   // 是否自动提交，默认true
    private boolean isAutoCommit;
+
+   // 是否只读，默认false
    private boolean isReadOnly;
    private boolean isIsolateInternalQueries;
+
+   // 是否注册MBean，默认否，用于运行时修改连接池参数
    private boolean isRegisterMbeans;
+
+   // 是否允许连接池挂起操作，默认否
    private boolean isAllowPoolSuspension;
    private DataSource dataSource;
    private Properties dataSourceProperties;
@@ -100,7 +128,7 @@ public class HikariConfig implements HikariConfigMXBean
 
    private long keepaliveTime;
 
-   private volatile boolean sealed;
+   private volatile boolean sealed;  // 标记配置已经在使用, dataSource初始化后就是true
 
    /**
     * Default constructor
@@ -979,6 +1007,10 @@ public class HikariConfig implements HikariConfigMXBean
    @SuppressWarnings("StatementWithEmptyBody")
    public void validate()
    {
+      /**
+       * 生成Pool名 HikariPool-1
+       * 从系统变量（com.zaxxer.hikari.pool_number）中获取，每次自增
+       */
       if (poolName == null) {
          poolName = generatePoolName();
       }
@@ -1026,8 +1058,10 @@ public class HikariConfig implements HikariConfigMXBean
          throw new IllegalArgumentException("dataSource or dataSourceClassName or jdbcUrl is required.");
       }
 
+      // 校验连接池数字类型相关的配置是否合理，设置默认值
       validateNumerics();
 
+      // 打印配置信息
       if (LOGGER.isDebugEnabled() || unitTest) {
          logConfiguration();
       }
@@ -1035,6 +1069,8 @@ public class HikariConfig implements HikariConfigMXBean
 
    private void validateNumerics()
    {
+      // maxLifetime 链接最大存活时间最低30秒，小于30秒不生效
+      // 如果maxLifetime<30秒，设置为30分钟
       if (maxLifetime != 0 && maxLifetime < SECONDS.toMillis(30)) {
          LOGGER.warn("{} - maxLifetime is less than 30000ms, setting to default {}ms.", poolName, MAX_LIFETIME);
          maxLifetime = MAX_LIFETIME;
@@ -1052,6 +1088,8 @@ public class HikariConfig implements HikariConfigMXBean
          keepaliveTime = DEFAULT_KEEPALIVE_TIME;
       }
 
+      // 连接泄露检测的时间，默认 0 不开启，不能低于 2 秒，不能比 maxLifetime 大，否则不开启
+      // 连接泄露检测时长 < 2s 或 > maxLifetime，设置为0关闭检测
       if (leakDetectionThreshold > 0 && !unitTest) {
          if (leakDetectionThreshold < SECONDS.toMillis(2) || (leakDetectionThreshold > maxLifetime && maxLifetime > 0)) {
             LOGGER.warn("{} - leakDetectionThreshold is less than 2000ms or more than maxLifetime, disabling it.", poolName);
@@ -1059,28 +1097,38 @@ public class HikariConfig implements HikariConfigMXBean
          }
       }
 
+      // 从连接池获取连接时最大等待时间，默认值 30 秒, 低于 250 毫秒不生效
+      // 如果connectionTimeout<250ms，设置为30秒
       if (connectionTimeout < SOFT_TIMEOUT_FLOOR) {
          LOGGER.warn("{} - connectionTimeout is less than {}ms, setting to {}ms.", poolName, SOFT_TIMEOUT_FLOOR, CONNECTION_TIMEOUT);
          connectionTimeout = CONNECTION_TIMEOUT;
       }
 
+      // 检测连接是否有效的超时时间，默认 5 秒，低于 250 毫秒不生效
+      // 如果validationTimeout<250ms，设置为5秒
       if (validationTimeout < SOFT_TIMEOUT_FLOOR) {
          LOGGER.warn("{} - validationTimeout is less than {}ms, setting to {}ms.", poolName, SOFT_TIMEOUT_FLOOR, VALIDATION_TIMEOUT);
          validationTimeout = VALIDATION_TIMEOUT;
       }
 
+      // 连接池中连接的最大数量，minIdle 大于 0 与其保持一致，否则默认 10
+      // 之前HikariConfig默认设置为-1了，这里改为10
       if (maxPoolSize < 1) {
          maxPoolSize = DEFAULT_POOL_SIZE;
       }
 
+      // 维持的最小连接数量，不配置默认等于 maxPoolSize
       if (minIdle < 0 || minIdle > maxPoolSize) {
          minIdle = maxPoolSize;
       }
 
+      // idleTimeout 空闲超时不能大于或者接近 maxLifetime，否则设置 0，禁用空闲线程回收
       if (idleTimeout + SECONDS.toMillis(1) > maxLifetime && maxLifetime > 0 && minIdle < maxPoolSize) {
          LOGGER.warn("{} - idleTimeout is close to or more than maxLifetime, disabling it.", poolName);
          idleTimeout = 0;
       }
+
+      // idleTimeout 空闲超时不能低于默认值 10 秒
       else if (idleTimeout != 0 && idleTimeout < SECONDS.toMillis(10) && minIdle < maxPoolSize) {
          LOGGER.warn("{} - idleTimeout is less than 10000ms, setting to default {}ms.", poolName, IDLE_TIMEOUT);
          idleTimeout = IDLE_TIMEOUT;

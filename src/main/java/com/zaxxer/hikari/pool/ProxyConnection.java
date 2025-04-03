@@ -48,8 +48,10 @@ public abstract class ProxyConnection implements Connection
    private static final Set<Integer> ERROR_CODES;
 
    @SuppressWarnings("WeakerAccess")
+   // 实际数据库连接
    protected Connection delegate;
 
+   // 关联的PoolEntry
    private final PoolEntry poolEntry;
    private final ProxyLeakTask leakTask;
    private final FastList<Statement> openStatements;
@@ -203,6 +205,7 @@ public abstract class ProxyConnection implements Connection
 
    private synchronized <T extends Statement> T trackStatement(final T statement)
    {
+      // 添加到 connection 的 openStatements, connection被close的时候, 会全部关闭这个
       openStatements.add(statement);
 
       return statement;
@@ -239,31 +242,42 @@ public abstract class ProxyConnection implements Connection
    public final void close() throws SQLException
    {
       // Closing statements can cause connection eviction, so this must run before the conditional below
+      // 关闭所有打开的Statement
+      // 每个Statement在MySQL服务器端都会占用资源（游标、临时表等）, 如不关闭，会导致服务器资源耗尽, 可能导致达到 mysql server max_prepared_stmt_count限制
       closeStatements();
 
       if (delegate != ClosedConnection.CLOSED_CONNECTION) {
+
+         // 连接泄露探测的任务取消
          leakTask.cancel();
 
          try {
+            // 是否需要回滚
             if (isCommitStateDirty && !isAutoCommit) {
                delegate.rollback();
                LOGGER.debug("{} - Executed rollback on connection {} due to dirty commit state on close().", poolEntry.getPoolName(), delegate);
             }
 
+            // 用户是否设置过readOnly等连接属性
             if (dirtyBits != 0) {
+               // 如果设置过，则恢复连接属性到创建时的状态
                poolEntry.resetConnectionState(this, dirtyBits);
             }
 
+            // 清除警告信息
             delegate.clearWarnings();
          }
          catch (SQLException e) {
             // when connections are aborted, exceptions are often thrown that should not reach the application
             if (!poolEntry.isMarkedEvicted()) {
+               // 发生异常可能会关闭连接
                throw checkException(e);
             }
          }
          finally {
+            // 把 delegate 改为CLOSED_CONNECTION
             delegate = ClosedConnection.CLOSED_CONNECTION;
+            // 归还PoolEntry
             poolEntry.recycle();
          }
       }
@@ -324,6 +338,7 @@ public abstract class ProxyConnection implements Connection
    @Override
    public PreparedStatement prepareStatement(String sql) throws SQLException
    {
+      // 看下 trackStatement
       return ProxyFactory.getProxyPreparedStatement(this, trackStatement(delegate.prepareStatement(sql)));
    }
 

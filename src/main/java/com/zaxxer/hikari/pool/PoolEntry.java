@@ -31,6 +31,7 @@ import static com.zaxxer.hikari.util.ClockSource.currentTime;
 
 /**
  * Entry used in the ConcurrentBag to track Connection instances.
+ * 实际拥有Connection的实例，并且实现IConcurrentBagEntry接口，可以放入ConcurrentBag容器。
  *
  * @author Brett Wooldridge
  */

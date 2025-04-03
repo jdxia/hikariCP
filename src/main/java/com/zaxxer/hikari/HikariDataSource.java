@@ -74,13 +74,23 @@ public class HikariDataSource extends HikariConfig implements DataSource, Closea
     */
    public HikariDataSource(HikariConfig configuration)
    {
+      // 校验配置 并 矫正配置, 设置默认值
       configuration.validate();
+
+      // 拷贝入参配置到自己
       configuration.copyStateTo(this);
 
+
       LOGGER.info("{} - Starting...", configuration.getPoolName());
+
+      /**
+       * 创建连接池，注意这里设置了 fastPathPool
+       * HikariPool 重要, 这是连接池管理器
+       */
       pool = fastPathPool = new HikariPool(this);
       LOGGER.info("{} - Start completed.", configuration.getPoolName());
 
+      // 标记配置已经在使用
       this.seal();
    }
 
@@ -88,14 +98,23 @@ public class HikariDataSource extends HikariConfig implements DataSource, Closea
    //                          DataSource methods
    // ***********************************************************************
 
-   /** {@inheritDoc} */
+
+   /**
+    * 分为2步
+    * 一是调用 connectionBag.borrow() 方法从池中获取连接，这里等待超时时间是 connectionTimeout
+    * 二是获取连接后，会主动检测连接是否可用，如果不可用会关闭连接，连接可用的话会绑定一个定时任务用于连接泄露的检测
+    */
+    /** {@inheritDoc} */
    @Override
    public Connection getConnection() throws SQLException
    {
+      // 判断数据源是否已经关闭
       if (isClosed()) {
          throw new SQLException("HikariDataSource " + this + " has been closed.");
       }
 
+      // 第二种配置方式会在第一次 getConnectionI() 时初始化pool
+      // 因为初始化 HikariDataSource 的时候已经设置了，所以这里直接走 return
       if (fastPathPool != null) {
          return fastPathPool.getConnection();
       }
@@ -179,6 +198,7 @@ public class HikariDataSource extends HikariConfig implements DataSource, Closea
    }
 
    /** {@inheritDoc} */
+   // unwrap获取目标实例
    @Override
    @SuppressWarnings("unchecked")
    public <T> T unwrap(Class<T> iface) throws SQLException
@@ -203,6 +223,7 @@ public class HikariDataSource extends HikariConfig implements DataSource, Closea
    }
 
    /** {@inheritDoc} */
+   // 判断能否获取指定Class的目标实例
    @Override
    public boolean isWrapperFor(Class<?> iface) throws SQLException
    {
@@ -340,6 +361,7 @@ public class HikariDataSource extends HikariConfig implements DataSource, Closea
    @Override
    public void close()
    {
+      // 修改isShutdown状态
       if (isShutdown.getAndSet(true)) {
          return;
       }
@@ -348,6 +370,8 @@ public class HikariDataSource extends HikariConfig implements DataSource, Closea
       if (p != null) {
          try {
             LOGGER.info("{} - Shutdown initiated...", getPoolName());
+
+            // 关闭所有线程池，取消所有任务，关闭所有数据库连接
             p.shutdown();
             LOGGER.info("{} - Shutdown completed.", getPoolName());
          }

@@ -38,10 +38,24 @@ import java.util.function.UnaryOperator;
 @SuppressWarnings("NullableProblems")
 public final class FastList<T> implements List<T>, RandomAccess, Serializable
 {
+   /**
+    FastList和ArrayList的add方法区别：
+      ArrayList方法层级比FastList多，出入栈更频繁。
+      由于ArrayList使用无参构造时，elementData数组变量是个空数组，需要在首次add时触发数组初始化，多了一些逻辑判断（对于Hikari来说，创建FastList和ArrayList时都传入了初始容量，这些逻辑判断都是无用的）。
+      FastList相比ArrayList去除了modCount的自增操作。
+      ArrayList扩容的计算逻辑相对复杂，考虑了很多边界条件。拷贝数组使用Arrays.copyOf方法，其底层也是调用System.arraycopy，但是调用栈很深。
+    */
+
+
    private static final long serialVersionUID = -4598088075242913858L;
 
+   // 容器里元素的Class
    private final Class<?> clazz;
+
+   // 数组
    private T[] elementData;
+
+   // 容器中元素个数
    private int size;
 
    /**
@@ -76,10 +90,12 @@ public final class FastList<T> implements List<T>, RandomAccess, Serializable
    public boolean add(T element)
    {
       if (size < elementData.length) {
+         // 如果元素个数没有超过数组长度，直接放入数组
          elementData[size++] = element;
       }
       else {
          // overflow-conscious code
+         // 否则两倍扩容，拷贝数组
          final var oldCapacity = elementData.length;
          final var newCapacity = oldCapacity << 1;
          @SuppressWarnings("unchecked")
@@ -273,6 +289,19 @@ public final class FastList<T> implements List<T>, RandomAccess, Serializable
    @Override
    public boolean removeAll(Collection<?> c)
    {
+      /**
+       * FastList和ArrayList的remove方法区别：
+         遍历顺序不同。ArrayList从前向后，FastList从后向前。
+
+         为什么要从后向前遍历呢？
+         首先，我们希望最后一个元素匹配，因为如果最后一个元素直接匹配numMoved就是0，这样就不用做数组拷贝移位了。作者这样写的目的，一定是因为对于HikariCP，最后一个元素被移除的情况更多。
+         为什么对于HikariCP往往是后添加的元素优先被移除呢？
+         注意到borrow方法从threadList里尝试获取空闲Entry的时候，正是从FastList的最后一个元素开始remove。
+         为什么要从最后一个开始remove呢？
+         注意到requite归还连接方法作为唯一一个放入threadList元素的入口，他放入的元素都是未使用的。如果borrow方法配合着从最后一个元素开始尝试获取，那CAS修改状态的成功率是非常高的，因为之前归还的元素可能已经被别的线程从shareList窃取了！
+
+         元素比较方式不同。ArrayList根据入参是否为空，分别使用==或equals判断；FastList只会使用==判断。这样基于内存地址直接比较，效率更高。
+       */
       throw new UnsupportedOperationException();
    }
 
