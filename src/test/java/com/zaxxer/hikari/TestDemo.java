@@ -24,8 +24,9 @@ public class TestDemo {
    private static final String jdbcUrl = "jdbc:mysql://127.0.0.1:3306/app?useUnicode=true&characterEncoding=utf-8&useSSL=false&verifyServerCertificate=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true";
 
    /**
+    * 删掉target文件夹
     * 使用java11, idea里面设置运行前不编译这个
-    * 每次运行前需要 mvn clean compile
+    * 每次运行前需要 mvn clean compile -DskipTests=true  -Dmaven.javadoc.skip=true -DskipSpotless=true --settings ~/.m2/settings.xml.aliyun
     * <p>
     * compile 会执行 JavassistProxyFactory 这个类, 生成一些类
     */

@@ -74,7 +74,7 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
    private static final String EVICTED_CONNECTION_MESSAGE = "(connection was evicted)";
    private static final String DEAD_CONNECTION_MESSAGE = "(connection is dead)";
 
-   // 实现Callable，负责创建连接
+   // 实现Callable，负责创建连接, 实际要看 PoolEntryCreator 的call方法
    private final PoolEntryCreator poolEntryCreator = new PoolEntryCreator();
    private final PoolEntryCreator postFillPoolEntryCreator = new PoolEntryCreator("After adding ");
    private final AtomicInteger addConnectionQueueDepth = new AtomicInteger();
@@ -585,7 +585,7 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
    private PoolEntry createPoolEntry()
    {
       try {
-         // 创建PoolEntry, 操作DriverDataSource获取真正的Connection
+         // 创建PoolEntry, 操作DriverDataSource获取真正的Connection, 核心
          final var poolEntry = newPoolEntry();
 
          /**
@@ -911,6 +911,8 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
                 * 创建Connection、创建PoolEntry
                 *
                 * 当一个连接被创建之后，就会开启一个延迟任务，检测连接如果超过MaxLifetime则进行软驱逐
+                *
+                * 核心: 往下
                 */
                final var poolEntry = createPoolEntry();
                if (poolEntry != null) {
