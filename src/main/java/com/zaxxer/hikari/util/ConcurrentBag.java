@@ -111,6 +111,8 @@ public class ConcurrentBag<T extends IConcurrentBagEntry> implements AutoCloseab
     * 交接队列
     * 队列大小为0的阻塞队列：生产者消费者模式
     * 主要用到SynchronousQueue的两个方法offer（当没有线程获取走offer的元素时返回false）和poll(timeout,unit)（指定时间内没有获取到元素时返回null）
+    *
+    * 里面不是 sync 锁, 是阻塞式的匹配等待（基于 CAS + park/unpark）
     */
    private final SynchronousQueue<T> handoffQueue;
 

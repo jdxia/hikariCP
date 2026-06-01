@@ -48,6 +48,28 @@ public class TestDemo {
             System.out.println(resultSet.getMetaData().getCatalogName(1) + ": " + resultSet.getString(1));
          }
       }
+
+
+
+      // 每 2 秒打印一次连接池中连接的数量
+      Thread monitorThread = new Thread(() -> {
+         HikariPoolMXBean poolMXBean = dataSource.getHikariPoolMXBean();
+         while (!Thread.currentThread().isInterrupted()) {
+            System.out.printf("[连接池监控] 总连接数: %d, 活跃连接数: %d, 空闲连接数: %d, 等待线程数: %d%n",
+               poolMXBean.getTotalConnections(),
+               poolMXBean.getActiveConnections(),
+               poolMXBean.getIdleConnections(),
+               poolMXBean.getThreadsAwaitingConnection());
+            try {
+               SECONDS.sleep(2);
+            } catch (InterruptedException e) {
+               Thread.currentThread().interrupt();
+            }
+         }
+      }, "pool-monitor");
+      monitorThread.setDaemon(true); // 设为守护线程，主线程结束后自动退出
+      monitorThread.start();
+
       SECONDS.sleep(100);
 
       // 关闭数据源
@@ -82,7 +104,7 @@ public class TestDemo {
        * 不同于另外两款数据源，对于HikariCP这个数据源来说，我建议把minimumIdle和maximumPoolSize配置为相同的值，这样可以保持数据源的连接数相对稳定，以达到更机制的速度。
        * 支持 JMX 动态修改
        */
-      hikariConfig.setMinimumIdle(2);
+      hikariConfig.setMinimumIdle(3);
 
       /**
        * 该配置项控制连接的物理存活时间，严格意义来讲，这不是一个保活配置，但是却能达到和保活差不多的效果。

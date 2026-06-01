@@ -46,6 +46,8 @@ public final class ProxyFactory
    static ProxyConnection getProxyConnection(final PoolEntry poolEntry, final Connection connection, final FastList<Statement> openStatements, final ProxyLeakTask leakTask, final boolean isReadOnly, final boolean isAutoCommit)
    {
       /**
+       * {@link ProxyConnection}
+       *
        * 代理类委托给实际的驱动类。一些代理，比如 ResultSet 的代理，只拦截少数方法。如果没有代码生成，代理将不得不实现所有 50 多个方法，这些方法只是简单地委托给包装的实例。
        * 基于反射的代码生成也意味着，当新的 JDK 版本为现有接口引入新的 JDBC 方法时，无需进行任何操作。
        * https://stackoverflow.com/questions/52181840/why-generate-hikariproxyconnection-by-javaassist-since-author-already-write-prox

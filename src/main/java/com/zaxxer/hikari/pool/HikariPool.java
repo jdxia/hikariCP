@@ -439,6 +439,8 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
           * addConnectionExecutor是负责创建连接的线程池, 核心线程数1，最大线程数1，5秒闲置时间（设置了允许核心线程回收），等待队列长度maxPoolSize，拒绝策略丢弃最老任务
           *
           * poolEntryCreator 创建PoolEntry的Callable任务
+          * poolEntryCreator 实现Callable，负责创建连接, 实际要看 PoolEntryCreator 的call方法
+          * {@link PoolEntryCreator#call()}
           */
          addConnectionExecutor.submit(poolEntryCreator);
       }
@@ -904,7 +906,10 @@ public final class HikariPool extends PoolBase implements HikariPoolMXBean, IBag
          var added = false;
          try {
 
-            // 判断连接池是否需要添加连接
+            /**
+             * 判断连接池是否需要添加连接
+             * 里面有sync锁
+             */
             while (shouldContinueCreating()) {
 
                /**
